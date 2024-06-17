@@ -25,6 +25,7 @@ import os
 import sys
 import logging
 import subprocess
+import matplotlib.pyplot as plt
 from typing import Optional
 from zarr import ZipStore
 
@@ -205,6 +206,8 @@ def mib2zarr(
     overwrite: bool = False,
     min_mib_size: int = _MIN_MIB_FILESIZE,
     max_aux_size: int = _MAX_AUX_FILESIZE,
+    vbf: bool = False,
+    stack_max: bool = False,
 ) -> list:
     f"""
     Convert MIB file(s) to ZARR format
@@ -231,7 +234,10 @@ def mib2zarr(
         The minimum MIB filesize in MB to accept when converting MIB files throughout a directory.
     max_aux_size : int
         The maximum filesize in MB to accept when loading auxilliary data as metadata.
-
+    vbf : bool
+        Whether to save a VBF image as a .png
+    stackmax : bool
+        Whether to save the maximum throughstack intensity of diffraction patterns as a .png
     Returns
     -------
     paths : list
@@ -278,7 +284,15 @@ def mib2zarr(
             )
 
     logger.info(
-        f'\n*** Converting "{datapath}" ***\n\tnavigation_shape={navigation_shape}\n\tlineskip={lineskip}\n\tchunks={chunks}\n\tzzip={zzip}\n\tzstore={zstore}\n\toverwrite={overwrite}'
+        f'\n*** Converting "{datapath}" ***'
+        f"\n\tnavigation_shape={navigation_shape}"
+        f"\n\tlineskip={lineskip}"
+        f"\n\tchunks={chunks}"
+        f"\n\tzzip={zzip}"
+        f"\n\tzstore={zstore}"
+        f"\n\toverwrite={overwrite}"
+        f"\n\tvbf={vbf}"
+        f"\n\tstack_max={stack_max}"
     )
 
     parameters = get_metadata_from_json(
@@ -309,6 +323,26 @@ def mib2zarr(
     # Slice data
     if lineskip > 0:
         s = s.inav[: s.axes_manager[0].size - lineskip, :]
+
+    if vbf:
+        nx, ny = s.axes_manager.signal_shape
+        cx, cy, r = nx // 2, ny // 2, nx // 10
+        logger.info(f"Creating VBF ({cx}, {cy}, {r})")
+        _vbf = s.get_integrated_intensity(hs.roi.CircleROI(cx, cy, r))
+        _vbf.compute()
+        _vbf.plot(axes_ticks=None, colorbar=None)
+        figure = plt.gcf()
+        figure.savefig(datapath.with_name(f"{datapath.stem}_vbf.png"))
+        plt.close(figure)
+
+    if stack_max:
+        logger.info(f"Creating maximum through-stack image")
+        _max = s.max(axis=[0, 1])
+        _max.compute()
+        _max.plot(norm="symlog", axes_ticks=None, colorbar=None)
+        figure = plt.gcf()
+        figure.savefig(datapath.with_name(f"{datapath.stem}_max.png"))
+        plt.close(figure)
 
     # Add some metadata
     # Set metadata from json file
@@ -412,6 +446,18 @@ if __name__ == "__main__":
         help="Whether to save the zspy file with zarr.ZipStore or not",
     )
     parser.add_argument(
+        "--vbf",
+        dest="vbf",
+        action="store_true",
+        help="Whether to also save a VBF as a .png",
+    )
+    parser.add_argument(
+        "--stackmax",
+        dest="stackmax",
+        action="store_true",
+        help="Whether to also save a maximum through-stack image of the diffraction patterns as a .png",
+    )
+    parser.add_argument(
         "-o",
         "--overwrite",
         dest="overwrite",
@@ -456,11 +502,14 @@ if __name__ == "__main__":
 
     mib2zarr(
         arguments.path,
-        arguments.navigation_shape,
-        arguments.lineskip,
-        arguments.chunks,
-        arguments.zzip,
-        arguments.overwrite,
-        arguments.mib_size,
-        arguments.max_aux_size,
+        navigation_shape=arguments.navigation_shape,
+        lineskip=arguments.lineskip,
+        chunks=arguments.chunks,
+        zzip=arguments.zzip,
+        zstore=arguments.zstore,
+        overwrite=arguments.overwrite,
+        min_mib_size=arguments.mib_size,
+        max_aux_size=arguments.max_aux_size,
+        vbf=arguments.vbf,
+        stack_max=arguments.stackmax,
     )
