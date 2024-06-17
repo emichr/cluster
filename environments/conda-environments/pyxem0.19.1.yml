@@ -4,6 +4,7 @@ channels:
 dependencies:
   - pyxem=0.19.1
   - dask>=2024.5.2
+  - jupyter
   - jupyterlab
   - ipyparallel
   - hyperspy-gui-ipywidgets
