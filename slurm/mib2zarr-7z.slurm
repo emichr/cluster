@@ -12,6 +12,6 @@ module purge
 source /cluster/projects/itea_lille-nv-fys-tem/miniforge3/bin/activate pyxem0.19.0
 
 source="/cluster/work/$USER/*-$1/"
-python ../python/mib2zarr.py "${source}" -o -vvv --zstore --vbf --stackmax
+python ../python/mib2zarr.py "${source}" -o -vvv --zzip --vbf --stackmax
 
 scontrol show job ${SLURM_JOB_ID} -d
