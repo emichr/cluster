@@ -25,6 +25,7 @@ import os
 import sys
 import logging
 import subprocess
+import traceback
 import matplotlib.pyplot as plt
 from typing import Optional
 from zarr import ZipStore
@@ -247,16 +248,47 @@ def mib2zarr(
     -----
     Metadata parameters stored in a .json file with identical stem as the MIB file will be loaded and used to get `navigation_shape`, cameralength, etc when present. If not present, users should specify at least the `navigation_shape` and `lineskip` to ensure correct operation.
     """
+    if "*" in datapath.stem:
+        converted_files = []
+        paths = datapath.parent.expanduser().glob(datapath.name)
+        for p in paths:
+            converted_files += mib2zarr(
+                p,
+                navigation_shape,
+                lineskip,
+                chunks,
+                zzip,
+                zstore,
+                overwrite,
+                min_mib_size,
+                max_aux_size,
+                vbf,
+                stack_max,
+            )
+        return converted_files
+
     if datapath.is_dir():
         converted_files = []
         mib_files = get_mib_files(datapath, min_mib_size)
         for p in mib_files:
             try:
                 converted_files += mib2zarr(
-                    p, navigation_shape, lineskip, chunks, zzip, zstore, overwrite
+                    p,
+                    navigation_shape,
+                    lineskip,
+                    chunks,
+                    zzip,
+                    zstore,
+                    overwrite,
+                    min_mib_size,
+                    max_aux_size,
+                    vbf,
+                    stack_max,
                 )
             except Exception as e:
-                print(f'Ignoring file "{p}" due to error:\n{e.with_traceback()}')
+                logger.error(
+                    f'Ignoring file "{p}" due to error:\n{e}\n{traceback.format_exc()}'
+                )
         return converted_files
 
     zarr = datapath.with_name(f"{datapath.stem}.zspy")
@@ -383,25 +415,28 @@ def mib2zarr(
     # Zip the zarr if requested
     if zzip:
         if overwrite and zzarr.exists():
-            logger.debug("Removing old zipped zarr file")
+            command = f'rm -r "{zzarr}"'
+            logger.debug(f"Removing old zipped zarr file with command: <{command}>")
             subprocess.run(
-                f'rm -r "{zzarr}"',
+                command,
                 shell=True,
                 executable="/bin/bash",
                 stderr=subprocess.STDOUT,
             )
 
-        logger.debug("Zipping zarr file")
+        command = f'7z a -tzip "{zzarr}" "{zarr}" | tail -4'
+        logger.debug(f"Zipping zarr file with command: <{command}>")
         subprocess.run(
-            f'7z a -tzip "{zzarr}" "{zarr}" | tail -4',
+            command,
             executable="/bin/bash",
             shell=True,
             stderr=subprocess.STDOUT,
         )
 
-        logger.debug("Removing zarr file")
+        command = f'rm -r "{zarr}"'
+        logger.debug(f"Removing zarr file with command: <{command}>")
         subprocess.run(
-            f'rm -r "{zarr}"',
+            command,
             shell=True,
             executable="/bin/bash",
             stderr=subprocess.STDOUT,
@@ -431,7 +466,11 @@ if __name__ == "__main__":
         help="The number of frames to skip at the end of each line",
     )
     parser.add_argument(
-        "--chunks", type=int, nargs=2, default=[32, 256], help="The chunks to use in each dimension"
+        "--chunks",
+        type=int,
+        nargs=2,
+        default=[32, 256],
+        help="The chunks to use in each dimension",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
