@@ -427,10 +427,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lineskip",
         type=int,
+        default=0,
         help="The number of frames to skip at the end of each line",
     )
     parser.add_argument(
-        "--chunks", type=int, nargs=2, help="The chunks to use in each dimension"
+        "--chunks", type=int, nargs=2, default=[32, 256], help="The chunks to use in each dimension"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
