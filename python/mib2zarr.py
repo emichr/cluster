@@ -125,6 +125,7 @@ def load_aux_data(
     :rtype: dict
     """
     # Add additional data as metadata
+    logger.debug(f'Adding auxillary data from directory "{directory}" to metadata')
     aux_data = {}
     for p in directory.iterdir():
         if p.is_file():
@@ -132,9 +133,19 @@ def load_aux_data(
                 filesize = p.stat().st_size / 1e6  # Filesize in MB
                 if filesize < max_filesize:
                     logger.debug(
-                        f'Adding aux datafile "{p}" with filesize {filesize:.0f} MB to metadata'
+                        f'Loading aux data "{p}" with filesize {filesize:.0f} MB'
                     )
-                    aux_data[p.name.replace(" ", "_")] = hs.load(str(p), lazy=False)
+                    s = hs.load(str(p), lazy=False)
+                    if (
+                        len(s.axes_manager.signal_shape) == 0
+                        and len(s.axes_manager.navigation_shape) == 0
+                    ):
+                        logger.debug(
+                            f"Ignoring file, {s} has dimension 0 in both signal and navigation space."
+                        )
+                    else:
+                        logger.debug(f"Adding aux data {s} to metadata")
+                        aux_data[p.name.replace(" ", "_")] = s
                 else:
                     logger.debug(
                         f'Ignoring aux datafile "{p}". Filesize {filesize:.0f}>{max_filesize:.0f} MB'
@@ -249,22 +260,27 @@ def mib2zarr(
     Metadata parameters stored in a .json file with identical stem as the MIB file will be loaded and used to get `navigation_shape`, cameralength, etc when present. If not present, users should specify at least the `navigation_shape` and `lineskip` to ensure correct operation.
     """
     if "*" in datapath.stem:
+        logger.debug(f"Detected wildcard in datapath.")
         converted_files = []
         paths = datapath.parent.expanduser().glob(datapath.name)
         for p in paths:
-            converted_files += mib2zarr(
-                p,
-                navigation_shape,
-                lineskip,
-                chunks,
-                zzip,
-                zstore,
-                overwrite,
-                min_mib_size,
-                max_aux_size,
-                vbf,
-                stack_max,
-            )
+            if p.is_dir() or p.suffix == ".mib":
+                logger.debug(f"Converting path {p}")
+                converted_files += mib2zarr(
+                    p,
+                    navigation_shape,
+                    lineskip,
+                    chunks,
+                    zzip,
+                    zstore,
+                    overwrite,
+                    min_mib_size,
+                    max_aux_size,
+                    vbf,
+                    stack_max,
+                )
+            else:
+                logger.debug(f"Skipping file {p}")
         return converted_files
 
     if datapath.is_dir():
@@ -394,16 +410,14 @@ def mib2zarr(
         {"Auxilliary_data": load_aux_data(datapath.parent, max_filesize=max_aux_size)}
     )
 
+    logger.debug(f"Original metadata:\n{s.original_metadata}")
+    logger.debug(f"Metadata: \n{s.metadata}")
+
     # Save as zarr
     if zstore:
         if overwrite and zzarr.exists():
             logger.debug("Removing old zipstore zarr file")
-            subprocess.run(
-                f'rm -r "{zzarr}"',
-                shell=True,
-                executable="/bin/bash",
-                stderr=subprocess.STDOUT,
-            )
+            zzarr.unlink(missing_ok=True)
         logger.info("Saving data with ZipStore")
         store = ZipStore(str(zzarr))
         s.save(store, chunks=s.data.chunksize, overwrite=True)
@@ -415,14 +429,8 @@ def mib2zarr(
     # Zip the zarr if requested
     if zzip:
         if overwrite and zzarr.exists():
-            command = f'rm -r "{zzarr}"'
-            logger.debug(f"Removing old zipped zarr file with command: <{command}>")
-            subprocess.run(
-                command,
-                shell=True,
-                executable="/bin/bash",
-                stderr=subprocess.STDOUT,
-            )
+            logger.debug(f"Removing old zipped zarr file")
+            zzarr.unlink(missing_ok=True)
 
         command = f'7z a -tzip "{zzarr}" "{zarr}" | tail -4'
         logger.debug(f"Zipping zarr file with command: <{command}>")
@@ -433,14 +441,8 @@ def mib2zarr(
             stderr=subprocess.STDOUT,
         )
 
-        command = f'rm -r "{zarr}"'
-        logger.debug(f"Removing zarr file with command: <{command}>")
-        subprocess.run(
-            command,
-            shell=True,
-            executable="/bin/bash",
-            stderr=subprocess.STDOUT,
-        )
+        logger.debug(f"Removing zarr file")
+        zarr.rmdir()
 
         logger.info(f'Finished converting "{datapath}". Converted data: "{zzarr}"')
         return [zzarr]
