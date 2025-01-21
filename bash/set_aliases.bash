@@ -2,6 +2,8 @@
 
 #Set aliases
 #Shortcut to TEM group shared directory
+echo "#Aliases" >> ~/.bashrc
+
 echo "alias temproject='cd ~/../../projects/itea_lille-nv-fys-tem/'" >> ~/.bashrc
 
 #Shortcut to your work directory
