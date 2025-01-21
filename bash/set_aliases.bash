@@ -35,3 +35,6 @@ echo "alias latest='source /cluster/projects/itea_lille-nv-fys-tem/miniforge3/bi
 
 #Shortcut to activate the miniforge base environment
 echo "alias miniforge='source /cluster/projects/itea_lille-nv-fys-tem/miniforge3/bin/activate'" >> ~/.bashrc
+
+#Run the bashrc file
+source ~/.bashrc
