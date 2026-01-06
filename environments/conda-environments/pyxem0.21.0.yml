@@ -5,6 +5,7 @@ dependencies:
   - pyxem=0.21.0
   - dask>=2024.5.2
   - exspy
+  - ipython
   - jupyterlab
   - ipyparallel
   - hyperspy-gui-ipywidgets
@@ -17,3 +18,4 @@ dependencies:
   - black
   - ruff
   - pytest
+  - pyqt

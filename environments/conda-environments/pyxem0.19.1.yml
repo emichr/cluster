@@ -4,6 +4,7 @@ channels:
 dependencies:
   - pyxem=0.19.1
   - dask>=2024.5.2
+  - ipython
   - jupyter
   - jupyterlab
   - ipyparallel
@@ -17,3 +18,4 @@ dependencies:
   - black
   - ruff
   - pytest
+  - pyqt
