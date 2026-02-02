@@ -2,12 +2,19 @@
 
 # Script: cluster-conda-switch.sh
 # Description: Automatically detect and switch between conda installations on a computing cluster
-# Usage: ./cluster-conda-switch.sh [list|switch|status|help]
+# Handles multiple installations gracefully
+# Created by "Qwen/Qwen3-Coder-30B-A3B-Instruct"
 
 # Cluster-specific paths to search
 CLUSTER_PATHS=(
     "/cluster/home/$USER/"
     "/cluster/projects/itea_lille-nv-fys-tem/"
+    "/cluster/apps/anaconda3"
+    "/cluster/apps/miniconda3"
+    "/cluster/apps/miniforge3"
+    "/cluster/software/anaconda3"
+    "/cluster/software/miniconda3"
+    "/cluster/software/miniforge3"
 )
 
 # Additional common paths for cluster environments
