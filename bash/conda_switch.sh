@@ -52,7 +52,7 @@ find_conda_installations() {
         "/cluster/home/$USER/"
         "/cluster/projects/itea_lille-nv-fys-tem/"
     )
-    
+
     # Find installations in common paths
     for path in "${common_paths[@]}"; do
         if [[ -d "$path" && -f "$path/bin/conda" ]]; then
