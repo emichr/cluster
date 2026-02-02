@@ -167,4 +167,4 @@ case "${1:-status}" in
 esac
 
 # Export PATH so it persists in subshells
-#export PATH
+export PATH
