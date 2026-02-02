@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Script: cluster-conda-switch.sh
-# Description: Automatically detect and switch between conda installations on a computing cluster
-# Handles multiple installations gracefully
-# Created by "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+# Script: debug-conda-switch.sh
+# Description: Debug version to find all conda installations with detailed logging
+# Usage: ./debug-conda-switch.sh [list|switch|status|help|debug]
 
 # Cluster-specific paths to search
 CLUSTER_PATHS=(
@@ -33,12 +32,83 @@ INSTALLATION_NAMES=()
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [list|switch|status|help]"
+    echo "Usage: $0 [list|switch|status|help|debug]"
     echo "  list     List all detected conda installations"
     echo "  switch   Interactive switch between installations"
     echo "  status   Show current active conda installation"
     echo "  help     Display this help message"
+    echo "  debug    Debug mode - show detailed search process"
     exit 1
+}
+
+# Function to debug search process
+debug_search() {
+    echo "=== DEBUG MODE: Detailed Search Process ==="
+    echo "User: $USER"
+    echo "Home: $HOME"
+    echo "Current working directory: $(pwd)"
+    echo ""
+    
+    # Show all cluster paths being searched
+    echo "Cluster paths being searched:"
+    for i in "${!CLUSTER_PATHS[@]}"; do
+        echo "  $((i+1)). ${CLUSTER_PATHS[$i]}"
+    done
+    echo ""
+    
+    # Show all common paths being searched
+    echo "Common cluster paths being searched:"
+    for i in "${!COMMON_CLUSTER_PATHS[@]}"; do
+        echo "  $((i+1)). ${COMMON_CLUSTER_PATHS[$i]}"
+    done
+    echo ""
+    
+    # Check each cluster path individually
+    echo "=== Checking Each Cluster Path ==="
+    for path in "${CLUSTER_PATHS[@]}"; do
+        echo "Checking: $path"
+        if [[ -d "$path" ]]; then
+            echo "  ✓ Directory exists"
+            echo "  Contents:"
+            ls -la "$path" 2>/dev/null | head -10
+            echo ""
+            
+            # Look for conda installations in this directory
+            echo "  Searching for conda installations in $path:"
+            find "$path" -maxdepth 3 -type d \( -name "anaconda3" -o -name "miniconda3" -o -name "miniforge3" \) 2>/dev/null | while read -r conda_dir; do
+                echo "    Found potential: $conda_dir"
+                if [[ -f "$conda_dir/bin/conda" ]]; then
+                    echo "    ✓ Valid conda installation found"
+                    echo "    Version: $($conda_dir/bin/conda --version 2>&1)"
+                else
+                    echo "    ✗ No conda binary found"
+                fi
+            done
+        else
+            echo "  ✗ Directory does not exist"
+        fi
+        echo ""
+    done
+    
+    # Check PATH for conda executables
+    echo "=== Checking PATH for conda executables ==="
+    echo "PATH: $PATH"
+    echo ""
+    echo "Conda executables found in PATH:"
+    which -a conda 2>/dev/null | while read -r conda_path; do
+        echo "  Found: $conda_path"
+        if [[ -n "$conda_path" && -f "$conda_path" ]]; then
+            conda_dir=$(dirname "$(dirname "$conda_path")")
+            echo "  Installation root: $conda_dir"
+            if [[ -f "$conda_dir/bin/conda" ]]; then
+                echo "  ✓ Valid conda installation"
+                echo "  Version: $($conda_dir/bin/conda --version 2>&1)"
+            else
+                echo "  ✗ Invalid installation root"
+            fi
+        fi
+    done
+    echo ""
 }
 
 # Function to find conda installations on cluster
@@ -48,28 +118,53 @@ find_conda_installations() {
     
     echo "Searching for conda installations in cluster paths..."
     
+    # Debug: Show what we're looking for
+    echo "Looking for conda installations in these patterns:"
+    echo "  - anaconda3"
+    echo "  - miniconda3" 
+    echo "  - miniforge3"
+    echo ""
+    
     # Search in cluster-specific paths first
     echo "Checking cluster paths..."
     for path in "${CLUSTER_PATHS[@]}"; do
+        echo "Searching in: $path"
         if [[ -d "$path" ]]; then
+            echo "  Directory exists"
+            
             # Look for conda installations in this directory
             find "$path" -maxdepth 3 -type d \( -name "anaconda3" -o -name "miniconda3" -o -name "miniforge3" \) 2>/dev/null | while read -r conda_dir; do
+                echo "  Found potential: $conda_dir"
                 if [[ -f "$conda_dir/bin/conda" ]]; then
+                    echo "  ✓ Valid conda installation found at: $conda_dir"
                     INSTALLATIONS+=("$conda_dir")
                     INSTALLATION_NAMES+=("$(basename "$conda_dir")")
-                    echo "Found: $conda_dir"
+                else
+                    echo "  ✗ No conda binary at: $conda_dir"
                 fi
             done
+        else
+            echo "  ✗ Directory does not exist: $path"
         fi
     done
     
     # Search in additional common cluster paths
     echo "Checking additional cluster paths..."
     for path in "${COMMON_CLUSTER_PATHS[@]}"; do
+        echo "Checking: $path"
         if [[ -d "$path" && -f "$path/bin/conda" ]]; then
+            echo "  ✓ Valid conda installation found: $path"
             INSTALLATIONS+=("$path")
             INSTALLATION_NAMES+=("$(basename "$path")")
-            echo "Found: $path"
+        else
+            if [[ -d "$path" ]]; then
+                echo "  ✗ Directory exists but no conda binary at: $path"
+                if [[ -f "$path/bin/conda" ]]; then
+                    echo "    Actually found conda binary at: $path/bin/conda"
+                fi
+            else
+                echo "  ✗ Directory does not exist: $path"
+            fi
         fi
     done
     
@@ -77,15 +172,21 @@ find_conda_installations() {
     echo "Checking PATH for conda installations..."
     while IFS= read -r conda_path; do
         if [[ -n "$conda_path" && -f "$conda_path" ]]; then
+            echo "Found conda in PATH: $conda_path"
             # Get the parent directory (installation root)
             conda_dir=$(dirname "$(dirname "$conda_path")")
+            echo "Installation root: $conda_dir"
             if [[ -d "$conda_dir" && -f "$conda_dir/bin/conda" ]]; then
                 # Avoid duplicates
                 if ! [[ " ${INSTALLATIONS[*]} " =~ " $conda_dir " ]]; then
+                    echo "  ✓ Adding to installations: $conda_dir"
                     INSTALLATIONS+=("$conda_dir")
                     INSTALLATION_NAMES+=("$(basename "$conda_dir")")
-                    echo "Found via PATH: $conda_dir"
+                else
+                    echo "  ✓ Already found, skipping duplicate"
                 fi
+            else
+                echo "  ✗ Invalid installation root: $conda_dir"
             fi
         fi
     done < <(which -a conda 2>/dev/null)
@@ -95,19 +196,44 @@ find_conda_installations() {
     filtered_installations=()
     filtered_names=()
     
+    echo "Before deduplication - Found ${#INSTALLATIONS[@]} installations:"
+    for i in "${!INSTALLATIONS[@]}"; do
+        echo "  $((i+1)). ${INSTALLATIONS[$i]} (${INSTALLATION_NAMES[$i]})"
+    done
+    
     for i in "${!INSTALLATIONS[@]}"; do
         if [[ -n "${INSTALLATIONS[$i]}" ]] && [[ ! -z "${seen[${INSTALLATIONS[$i]}]}" ]]; then
+            echo "Skipping duplicate: ${INSTALLATIONS[$i]}"
             continue
         fi
         seen["${INSTALLATIONS[$i]}"]=1
         filtered_installations+=("${INSTALLATIONS[$i]}")
         filtered_names+=("${INSTALLATION_NAMES[$i]}")
+        echo "Keeping: ${INSTALLATIONS[$i]} (${INSTALLATION_NAMES[$i]})"
     done
     
     INSTALLATIONS=("${filtered_installations[@]}")
     INSTALLATION_NAMES=("${filtered_names[@]}")
     
-    echo "Total cluster installations found: ${#INSTALLATIONS[@]}"
+    echo "After deduplication - Final count: ${#INSTALLATIONS[@]}"
+    
+    # Validate each installation
+    echo "Validating installations:"
+    for i in "${!INSTALLATIONS[@]}"; do
+        path="${INSTALLATIONS[$i]}"
+        name="${INSTALLATION_NAMES[$i]}"
+        echo "  Checking $name at $path..."
+        if validate_installation "$path" "$name"; then
+            echo "    ✓ Valid"
+        else
+            echo "    ✗ Invalid - removing"
+            # Remove invalid installation
+            INSTALLATIONS=("${INSTALLATIONS[@]:0:$i}" "${INSTALLATIONS[@]:$((i+1))}")
+            INSTALLATION_NAMES=("${INSTALLATION_NAMES[@]:0:$i}" "${INSTALLATION_NAMES[@]:$((i+1))}")
+        fi
+    done
+    
+    echo "Final installations found: ${#INSTALLATIONS[@]}"
 }
 
 # Function to validate installation
@@ -115,19 +241,25 @@ validate_installation() {
     local path="$1"
     local name="$2"
     
+    echo "  Validating: $path"
+    
     if [[ ! -d "$path" ]]; then
+        echo "    ✗ Directory does not exist"
         return 1
     fi
     
     if [[ ! -f "$path/bin/conda" ]]; then
+        echo "    ✗ No conda binary found at $path/bin/conda"
         return 1
     fi
     
     # Additional check - try to get conda info
     if ! "$path/bin/conda" --version >/dev/null 2>&1; then
+        echo "    ✗ Conda version check failed"
         return 1
     fi
     
+    echo "    ✓ Installation is valid"
     return 0
 }
 
@@ -137,6 +269,11 @@ list_installations() {
     
     if [[ ${#INSTALLATIONS[@]} -eq 0 ]]; then
         echo "No conda installations found on cluster."
+        echo "This might be due to:"
+        echo "  1. No installations in the searched directories"
+        echo "  2. Insufficient permissions to access directories"
+        echo "  3. Installations don't follow expected naming patterns"
+        echo "  4. Conda binary not found in expected location"
         return
     fi
     
@@ -369,6 +506,9 @@ case "${1:-status}" in
     status)
         find_conda_installations
         show_status
+        ;;
+    debug)
+        debug_search
         ;;
     help|-h|--help)
         usage
