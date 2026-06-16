@@ -19,4 +19,5 @@ dependencies:
   - ruff
   - pytest
   - pyqt
+  - qtpy
   - ipympl
